@@ -101,15 +101,23 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
                 splitted_indices[idx] = (len(input_), len(input_) + 1)
                 input_.append(text.text)
 
-        resp = self.openai_response(client, input=input_, **kwargs).dict()
-        output_ = list(sorted(resp["data"], key=lambda x: x["index"]))
+        # ---------- 新增：分批发送，每批不超过 10 条 ----------
+        batch_size = 10  # 阿里云限制为 20，这里保守设为 10
+        all_embeddings = []
+        for i in range(0, len(input_), batch_size):
+            batch_input = input_[i:i + batch_size]
+            resp = self.openai_response(client, input=batch_input, **kwargs).dict()
+            data = sorted(resp["data"], key=lambda x: x["index"])
+            # 由于每次调用返回的索引都是从0开始，需要累积偏移
+            all_embeddings.extend([item["embedding"] for item in data])
+        # ------------------------------------------------
 
         output = []
         for idx, doc in enumerate(input_doc):
-            embs = output_[splitted_indices[idx][0] : splitted_indices[idx][1]]
+            embs = all_embeddings[splitted_indices[idx][0] : splitted_indices[idx][1]]
             if len(embs) == 1:
                 output.append(
-                    DocumentWithEmbedding(embedding=embs[0]["embedding"], content=doc)
+                    DocumentWithEmbedding(embedding=embs[0], content=doc)
                 )
                 continue
 
@@ -117,7 +125,7 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
                 len(_)
                 for _ in input_[splitted_indices[idx][0] : splitted_indices[idx][1]]
             ]
-            vs: list[list[float]] = [_["embedding"] for _ in embs]
+            vs: list[list[float]] = [_ for _ in embs]
             emb = np.average(vs, axis=0, weights=chunk_lens)
             emb = emb / np.linalg.norm(emb)
             output.append(DocumentWithEmbedding(embedding=emb.tolist(), content=doc))
@@ -129,15 +137,23 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
     ) -> list[DocumentWithEmbedding]:
         input_ = self.prepare_input(text)
         client = self.prepare_client(async_version=True)
-        resp = await self.openai_response(
-            client, input=[_.text if _.text else " " for _ in input_], **kwargs
-        ).dict()
-        output_ = sorted(resp["data"], key=lambda x: x["index"])
-        return [
-            DocumentWithEmbedding(embedding=o["embedding"], content=i)
-            for i, o in zip(input_, output_)
-        ]
 
+        # ---------- 新增：分批发送 ----------
+        batch_size = 10
+        all_embeddings = []
+        for i in range(0, len(input_), batch_size):
+            batch_input = [_.text if _.text else " " for _ in input_[i:i + batch_size]]
+            resp = await self.openai_response(
+                client, input=batch_input, **kwargs
+            ).dict()
+            data = sorted(resp["data"], key=lambda x: x["index"])
+            all_embeddings.extend([item["embedding"] for item in data])
+        # ----------------------------------
+
+        return [
+            DocumentWithEmbedding(embedding=embedding, content=doc)
+            for doc, embedding in zip(input_, all_embeddings)
+        ]
 
 class OpenAIEmbeddings(BaseOpenAIEmbeddings):
     """OpenAI chat model"""
