@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     branches:
-    - main
+    - khose-dev
 
 jobs:
   build:
@@ -23,7 +23,7 @@ jobs:
     - name: Build
       uses: docker/build-push-action@v7
       with:
-        context: kotaemon
+        context: .
         platforms: linux/amd64,linux/arm64
         push: false
         tags: ${{ env.REPO }}/${{ env.IMAGE }}:dev
