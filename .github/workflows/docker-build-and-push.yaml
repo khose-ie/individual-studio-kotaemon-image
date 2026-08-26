@@ -33,22 +33,18 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
-          context: kotaemon
+          context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.REPO }}/${{ env.IMAGE }}:${{ github.ref_name }}
-      - name: Build and push latest
-        uses: docker/build-push-action@v7
-        with:
-          context: kotaemon
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.REPO }}/${{ env.IMAGE }}:latest
+          file: ${{ github.workspace }}/Dockerfile.khose
+          tags: |
+            ${{ env.REPO }}/${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.REPO }}/${{ env.IMAGE }}:latest
       - name: Update docker repo description
         uses: peter-evans/dockerhub-description@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
           repository: ${{ env.REPO }}/${{ env.IMAGE }}
-          readme-filepath: kotaemon/README.md
+          readme-filepath: README.md
   
